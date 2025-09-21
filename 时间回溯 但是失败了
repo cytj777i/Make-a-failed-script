@@ -1,0 +1,431 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- 配置变量
+local isRecording = false
+local isReplaying = false
+local replaySpeed = 1 -- 默认回溯速度
+local positionRecords = {}
+local rotationRecords = {}
+local maxRecordDuration = 60 -- 最大记录60秒
+
+-- 创建UI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TimeRewindUI"
+ScreenGui.Parent = game.CoreGui
+
+-- 主框架
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 150, 0, 190)
+MainFrame.Position = UDim2.new(1, -160, 0, 10)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- 标题
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Title.Text = "时间回溯"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = Title
+
+-- 开始记录按钮
+local RecordButton = Instance.new("TextButton")
+RecordButton.Size = UDim2.new(0.8, 0, 0, 30)
+RecordButton.Position = UDim2.new(0.1, 0, 0, 35)
+RecordButton.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+RecordButton.Text = "开始记录"
+RecordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RecordButton.Font = Enum.Font.SourceSansBold
+RecordButton.TextSize = 14
+RecordButton.Parent = MainFrame
+
+local RecordCorner = Instance.new("UICorner")
+RecordCorner.CornerRadius = UDim.new(0, 6)
+RecordCorner.Parent = RecordButton
+
+-- 停止记录按钮
+local StopRecordButton = Instance.new("TextButton")
+StopRecordButton.Size = UDim2.new(0.8, 0, 0, 30)
+StopRecordButton.Position = UDim2.new(0.1, 0, 0, 70)
+StopRecordButton.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
+StopRecordButton.Text = "停止记录"
+RecordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopRecordButton.Font = Enum.Font.SourceSansBold
+StopRecordButton.TextSize = 14
+StopRecordButton.Parent = MainFrame
+
+local StopRecordCorner = Instance.new("UICorner")
+StopRecordCorner.CornerRadius = UDim.new(0, 6)
+StopRecordCorner.Parent = StopRecordButton
+
+-- 开始回溯按钮
+local StartButton = Instance.new("TextButton")
+StartButton.Size = UDim2.new(0.8, 0, 0, 30)
+StartButton.Position = UDim2.new(0.1, 0, 0, 105)
+StartButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+StartButton.Text = "开始回溯"
+StartButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartButton.Font = Enum.Font.SourceSansBold
+StartButton.TextSize = 14
+StartButton.Parent = MainFrame
+
+local StartCorner = Instance.new("UICorner")
+StartCorner.CornerRadius = UDim.new(0, 6)
+StartCorner.Parent = StartButton
+
+-- 停止回溯按钮
+local StopButton = Instance.new("TextButton")
+StopButton.Size = UDim2.new(0.8, 0, 0, 30)
+StopButton.Position = UDim2.new(0.1, 0, 0, 140)
+StopButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+StopButton.Text = "停止回溯"
+StopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopButton.Font = Enum.Font.SourceSansBold
+StopButton.TextSize = 14
+StopButton.Parent = MainFrame
+
+local StopCorner = Instance.new("UICorner")
+StopCorner.CornerRadius = UDim.new(0, 6)
+StopCorner.Parent = StopButton
+
+-- 速度调节按钮和显示
+local SpeedFrame = Instance.new("Frame")
+SpeedFrame.Size = UDim2.new(0.8, 0, 0, 25)
+SpeedFrame.Position = UDim2.new(0.1, 0, 0, 175)
+SpeedFrame.BackgroundTransparency = 1
+SpeedFrame.Parent = MainFrame
+
+local SpeedDownButton = Instance.new("TextButton")
+SpeedDownButton.Size = UDim2.new(0, 25, 0, 25)
+SpeedDownButton.Position = UDim2.new(0, 0, 0, 0)
+SpeedDownButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+SpeedDownButton.Text = "-"
+SpeedDownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedDownButton.Font = Enum.Font.SourceSansBold
+SpeedDownButton.TextSize = 16
+SpeedDownButton.Parent = SpeedFrame
+
+local SpeedDownCorner = Instance.new("UICorner")
+SpeedDownCorner.CornerRadius = UDim.new(0, 4)
+SpeedDownCorner.Parent = SpeedDownButton
+
+local SpeedDisplay = Instance.new("TextLabel")
+SpeedDisplay.Size = UDim2.new(0, 50, 0, 25)
+SpeedDisplay.Position = UDim2.new(0, 30, 0, 0)
+SpeedDisplay.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SpeedDisplay.Text = "速度: 1x"
+SpeedDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedDisplay.Font = Enum.Font.SourceSans
+SpeedDisplay.TextSize = 12
+SpeedDisplay.Parent = SpeedFrame
+
+local SpeedDisplayCorner = Instance.new("UICorner")
+SpeedDisplayCorner.CornerRadius = UDim.new(0, 4)
+SpeedDisplayCorner.Parent = SpeedDisplay
+
+local SpeedUpButton = Instance.new("TextButton")
+SpeedUpButton.Size = UDim2.new(0, 25, 0, 25)
+SpeedUpButton.Position = UDim2.new(0, 85, 0, 0)
+SpeedUpButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+SpeedUpButton.Text = "+"
+SpeedUpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedUpButton.Font = Enum.Font.SourceSansBold
+SpeedUpButton.TextSize = 16
+SpeedUpButton.Parent = SpeedFrame
+
+local SpeedUpCorner = Instance.new("UICorner")
+SpeedUpCorner.CornerRadius = UDim.new(0, 4)
+SpeedUpCorner.Parent = SpeedUpButton
+
+-- 添加拖动功能
+local dragging = false
+local dragInput, dragStart, startPos
+
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, 
+                                     startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- 记录位置和旋转
+local function recordPosition()
+    if not isRecording then return end
+    
+    table.insert(positionRecords, {
+        Position = HumanoidRootPart.Position,
+        Rotation = HumanoidRootPart.CFrame - HumanoidRootPart.Position,
+        Timestamp = tick()
+    })
+    
+    -- 限制记录数量
+    if #positionRecords > maxRecordDuration * 30 then -- 假设30FPS
+        table.remove(positionRecords, 1)
+    end
+end
+
+-- 开始记录
+local function startRecording()
+    isRecording = true
+    positionRecords = {}
+    RecordButton.BackgroundColor3 = Color3.fromRGB(0, 50, 100)
+    RecordButton.Text = "记录中..."
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "时间回溯",
+        Text = "开始记录位置",
+        Duration = 2
+    })
+end
+
+-- 停止记录
+local function stopRecording()
+    isRecording = false
+    RecordButton.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+    RecordButton.Text = "开始记录"
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "时间回溯",
+        Text = "停止记录位置，共记录 " .. #positionRecords .. " 个位置点",
+        Duration = 3
+    })
+end
+
+-- 开始回溯
+local function startRewind()
+    if #positionRecords == 0 then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "时间回溯",
+            Text = "没有记录的位置数据，请先开始记录",
+            Duration = 2
+        })
+        return
+    end
+    
+    if isReplaying then return end
+    
+    isReplaying = true
+    StartButton.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+    StartButton.Text = "回溯中..."
+    
+    -- 禁用角色控制
+    LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
+    LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+    
+    -- 回溯循环
+    spawn(function()
+        local currentIndex = #positionRecords
+        
+        while isReplaying and currentIndex > 0 do
+            local record = positionRecords[currentIndex]
+            
+            -- 使用TweenService平滑移动
+            local tweenInfo = TweenInfo.new(
+                0.5 / replaySpeed,
+                Enum.EasingStyle.Linear,
+                Enum.EasingDirection.Out,
+                0,
+                false,
+                0
+            )
+            
+            local goal = {}
+            goal.Position = record.Position
+            goal.CFrame = CFrame.new(record.Position) * record.Rotation
+            
+            local tween = TweenService:Create(HumanoidRootPart, tweenInfo, goal)
+            tween:Play()
+            
+            -- 等待一段时间
+            wait(0.5 / replaySpeed)
+            
+            currentIndex = currentIndex - 1
+            
+            -- 如果到达开始位置，停止回溯
+            if currentIndex <= 0 then
+                stopRewind()
+                break
+            end
+        end
+    end)
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "时间回溯",
+        Text = "开始回溯，速度: " .. replaySpeed .. "x",
+        Duration = 2
+    })
+end
+
+-- 停止回溯
+local function stopRewind()
+    if not isReplaying then return end
+    
+    isReplaying = false
+    StartButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    StartButton.Text = "开始回溯"
+    
+    -- 恢复角色控制
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+        LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+    end
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "时间回溯",
+        Text = "停止回溯",
+        Duration = 2
+    })
+end
+
+-- 调整回溯速度
+local function adjustSpeed(increase)
+    if increase then
+        replaySpeed = math.min(replaySpeed + 0.5, 5) -- 最大5倍速
+    else
+        replaySpeed = math.max(replaySpeed - 0.5, 0.5) -- 最小0.5倍速
+    end
+    
+    SpeedDisplay.Text = "速度: " .. replaySpeed .. "x"
+    
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "时间回溯",
+        Text = "回溯速度设置为: " .. replaySpeed .. "x",
+        Duration = 1
+    })
+end
+
+-- 按钮事件
+RecordButton.MouseButton1Click:Connect(function()
+    if isReplaying then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "时间回溯",
+            Text = "请先停止回溯",
+            Duration = 2
+        })
+        return
+    end
+    
+    if isRecording then
+        stopRecording()
+    else
+        startRecording()
+    end
+end)
+
+StopRecordButton.MouseButton1Click:Connect(function()
+    if isRecording then
+        stopRecording()
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "时间回溯",
+            Text = "当前没有在记录",
+            Duration = 2
+        })
+    end
+end)
+
+StartButton.MouseButton1Click:Connect(function()
+    if isRecording then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "时间回溯",
+            Text = "请先停止记录",
+            Duration = 2
+        })
+        return
+    end
+    
+    if isReplaying then
+        stopRewind()
+    else
+        startRewind()
+    end
+end)
+
+StopButton.MouseButton1Click:Connect(function()
+    if isReplaying then
+        stopRewind()
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "时间回溯",
+            Text = "当前没有在回溯",
+            Duration = 2
+        })
+    end
+end)
+
+SpeedDownButton.MouseButton1Click:Connect(function()
+    adjustSpeed(false)
+end)
+
+SpeedUpButton.MouseButton1Click:Connect(function()
+    adjustSpeed(true)
+end)
+
+-- 记录循环
+RunService.Heartbeat:Connect(function()
+    if isRecording then
+        recordPosition()
+    end
+end)
+
+-- 角色重生处理
+LocalPlayer.CharacterAdded:Connect(function(character)
+    Character = character
+    HumanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    
+    -- 重置状态
+    isRecording = false
+    isReplaying = false
+    RecordButton.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+    RecordButton.Text = "开始记录"
+    StartButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    StartButton.Text = "开始回溯"
+    StopButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+end)
+
+-- 初始提示
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "时间回溯已加载",
+    Text = "使用右上角的控制面板操作",
+    Duration = 5
+})
